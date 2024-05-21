@@ -2,10 +2,30 @@
 
 namespace Tyr::Vision
 {
+
 void Filtered::processBalls()
 {
+//    newKalmanBall();
     filterBalls();
     predictBall();
+}
+
+void Filtered::newKalmanBall(const Common::Vec2 &t_position)
+{
+    Eigen::VectorXd z(2);
+    m_ball_ekf->predict(m_ball_ekf->m_dt);
+    z(0) = t_position.x;
+    z(1) = t_position.y;
+    m_ball_ekf->update(z, m_ball_ekf->m_delay);
+
+    auto m_x = m_ball_ekf->getSate();
+
+    m_state.ball.position = Common::Vec2(m_x(0), m_x(1));
+    m_state.ball.velocity = Common::Vec2(m_x(2), m_x(3));
+    Common::logCritical("acc: {}", Common::Vec2(m_x(4), m_x(5)).length());
+
+    m_ball_not_seen         = 0;
+    m_state.ball.seen_state = Common::SeenState::Seen;
 }
 
 void Filtered::filterBalls()
@@ -56,6 +76,7 @@ void Filtered::filterBalls()
                 m_ball_kalman.updatePosition(balls[id].position.xy());
                 m_state.ball.position = m_ball_kalman.getPosition();
                 m_state.ball.velocity = m_ball_kalman.getVelocity();
+
 
                 m_ball_not_seen         = 0;
                 m_state.ball.seen_state = Common::SeenState::Seen;

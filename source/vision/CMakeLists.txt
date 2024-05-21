@@ -1,4 +1,5 @@
 project(${CMAKE_PROJECT_NAME}-vision)
+find_package(Eigen3 CONFIG REQUIRED)
 
 find_package(immortals-common CONFIG REQUIRED)
 
@@ -27,6 +28,7 @@ source_group(TREE ${CMAKE_CURRENT_SOURCE_DIR} FILES ${SOURCE_FILES} ${HEADER_FIL
 
 target_link_libraries(${PROJECT_NAME} PUBLIC
         immortals::common)
+	Eigen3::Eigen)
 
 set_target_properties(${PROJECT_NAME} PROPERTIES UNITY_BUILD ${USE_UNITY_BUILDS})
 

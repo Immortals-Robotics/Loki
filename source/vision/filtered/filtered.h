@@ -1,9 +1,97 @@
 #pragma once
 
 #include "../kalman/filtered_object.h"
-
 namespace Tyr::Vision
 {
+class Ekf {
+public:
+    // Constructor
+    Ekf(double dt, double delay): m_dt(dt), m_delay(delay)
+    {
+        // Initialize state vector
+        m_x = Eigen::VectorXd(6);
+        m_x.setZero();
+
+        // Initialize covariance matrix
+        m_P = Eigen::MatrixXd(6, 6);
+        m_P.setIdentity();
+        m_P *= 100;  // High uncertainty in initial state
+
+        // Process noise covariance
+        m_Q = Eigen::MatrixXd(6, 6);
+        m_Q.setZero();
+        m_Q(0, 0) = m_Q(1, 1) = 0.5;  // Position noise
+        m_Q(2, 2) = m_Q(3, 3) = 10.5;  // Velocity noise
+        m_Q(4, 4) = m_Q(5, 5) = 50.5;  // Acceleration noise
+
+        // Measurement noise covariance
+        m_R = Eigen::MatrixXd(2, 2);
+        m_R.setIdentity();
+        m_R *= 0.1;  // Low measurement noise
+
+        // Identity matrix
+        m_I = Eigen::MatrixXd::Identity(6, 6);
+    }
+
+    // Predict and update methods
+    inline void predict(double delta_t) {
+        Eigen::MatrixXd A(6, 6);
+        A << 1, 0, delta_t, 0, 0.5 * delta_t * delta_t, 0,
+            0, 1, 0, delta_t, 0, 0.5 * delta_t * delta_t,
+            0, 0, 1, 0, delta_t, 0,
+            0, 0, 0, 1, 0, delta_t,
+            0, 0, 0, 0, 1, 0,
+            0, 0, 0, 0, 0, 1;
+
+        // Predict state
+        m_x = A * m_x;
+
+        // Predict covariance
+        m_P = A * m_P * A.transpose() + m_Q;
+    }
+    inline void update(const Eigen::VectorXd &z, double delta_t) {
+        // Predict state to the measurement time (compensate for delay)
+        predict(delta_t);
+
+        // Measurement matrix (Cimp)
+        Eigen::MatrixXd H(2, 6);
+        H << 1, 0, 0, 0, 0, 0,
+            0, 1, 0, 0, 0, 0;
+
+        // Measurement prediction residual (Loss vector)
+        Eigen::VectorXd y = z - H * m_x;
+
+        // Measurement covariance
+        Eigen::MatrixXd S = H * m_P * H.transpose() + m_R;
+
+        // Kalman gain
+        Eigen::MatrixXd K = m_P * H.transpose() * S.inverse();
+
+        // Update state
+        m_x = m_x + K * y;
+
+        // Update covariance
+        m_P = (m_I - K * H) * m_P;
+
+        // Propagate state back to the current time
+        predict(-delta_t);
+    }
+
+    double m_dt;          // Time step for 60 Hz
+    double m_delay;
+
+    Eigen::VectorXd getSate() const {
+        return m_x;
+    }
+private:
+    Eigen::VectorXd m_x;  // State vector
+    Eigen::MatrixXd m_P;  // Covariance matrix
+    Eigen::MatrixXd m_Q;  // Process noise covariance
+    Eigen::MatrixXd m_R;  // Measurement noise covariance
+    Eigen::MatrixXd m_I;  // Identity matrix
+};
+
+
 class Filtered
 {
 public:
@@ -24,6 +112,7 @@ private:
     void processBalls();
     void filterBalls();
     void predictBall();
+    void newKalmanBall(const Common::Vec2 &t_position);
 
 private:
     // TODO: move to settings
@@ -52,5 +141,8 @@ private:
 
     Common::RawWorldState m_raw_state;
     Common::WorldState    m_state;
+
+    std::unique_ptr<Ekf> m_ball_ekf;
+
 };
 } // namespace Tyr::Vision

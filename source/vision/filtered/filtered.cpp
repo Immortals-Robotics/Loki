@@ -20,6 +20,7 @@ Filtered::Filtered()
 
     m_client = std::make_unique<Common::NngClient>(Common::config().network.raw_world_state_url);
     m_server = std::make_unique<Common::NngServer>(Common::config().network.world_state_url);
+    m_ball_ekf = std::make_unique<Ekf>(1./60., 0);
 }
 
 bool Filtered::receive()
