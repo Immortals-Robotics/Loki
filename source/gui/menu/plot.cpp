@@ -116,7 +116,6 @@ void PlotMenu::draw(const Common::WorldState &t_world, const bool &t_playback)
         default:
             break;
         }
-
         ImPlot::EndPlot();
     }
 }

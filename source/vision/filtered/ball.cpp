@@ -5,9 +5,23 @@ namespace Tyr::Vision
 
 void Filtered::processBalls()
 {
-//    newKalmanBall();
-    filterBalls();
-    predictBall();
+    auto &balls = m_raw_state.balls;
+    if(balls.size())
+    {
+        newKalmanBall(balls[0].position);
+        //    } else if(balls.size())
+        //    {
+        //        Common::Vec2 merge(0,0);
+        //        for (const auto ball:balls)
+        //        {
+        //            merge +=ball.position;
+        //        }
+        //        merge/=balls.size();
+        //        newKalmanBall(merge);
+        //    }
+        //    filterBalls();
+        //    predictBall();
+    }
 }
 
 void Filtered::newKalmanBall(const Common::Vec2 &t_position)
@@ -22,8 +36,9 @@ void Filtered::newKalmanBall(const Common::Vec2 &t_position)
 
     m_state.ball.position = Common::Vec2(m_x(0), m_x(1));
     m_state.ball.velocity = Common::Vec2(m_x(2), m_x(3));
-    Common::logCritical("acc: {}", Common::Vec2(m_x(4), m_x(5)).length());
-
+    m_state.ball.acceleration = Common::Vec2(m_x(4), m_x(5));
+    Common::Vec2 stop_point = m_state.ball.position + m_state.ball.velocity.normalized() * ( m_state.ball.velocity.lengthSquared() / (2 * (950)));
+    Common::debug().draw(Common::Circle{stop_point, 100}, Common::Color::red());
     m_ball_not_seen         = 0;
     m_state.ball.seen_state = Common::SeenState::Seen;
 }

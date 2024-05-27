@@ -20,14 +20,14 @@ public:
         // Process noise covariance
         m_Q = Eigen::MatrixXd(6, 6);
         m_Q.setZero();
-        m_Q(0, 0) = m_Q(1, 1) = 0.5;  // Position noise
-        m_Q(2, 2) = m_Q(3, 3) = 10.5;  // Velocity noise
-        m_Q(4, 4) = m_Q(5, 5) = 50.5;  // Acceleration noise
+        m_Q(0, 0) = m_Q(1, 1) = 1.1;  // Position noise
+        m_Q(2, 2) = m_Q(3, 3) = 1.1;  // Velocity noise
+        m_Q(4, 4) = m_Q(5, 5) = 1.1;  // Acceleration noise
 
         // Measurement noise covariance
         m_R = Eigen::MatrixXd(2, 2);
         m_R.setIdentity();
-        m_R *= 0.1;  // Low measurement noise
+        m_R *= 0.01;  // Low measurement noise
 
         // Identity matrix
         m_I = Eigen::MatrixXd::Identity(6, 6);

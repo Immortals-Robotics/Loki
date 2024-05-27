@@ -42,7 +42,7 @@ port = 10099
 
 [network.vision]
 ip = '224.5.23.2'
-port = 10020
+port = 10006
 
 [network.vision_interface]
 ip = '127.0.0.1'

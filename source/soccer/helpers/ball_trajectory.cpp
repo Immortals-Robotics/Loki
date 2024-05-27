@@ -73,6 +73,7 @@ void BallTrajectory::calculate() const
     if (isVertical)
         m_ball_line.chapeKon();
 
+
     if (m_ball_line.isAmoodi())
     {
         Common::debug().draw(Common::LineSegment{Common::Vec2(m_ball_line.getXIntercept(), -2000),
