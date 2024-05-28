@@ -3,94 +3,141 @@
 #include "../kalman/filtered_object.h"
 namespace Tyr::Vision
 {
-class Ekf {
+class Ekf
+{
 public:
     // Constructor
-    Ekf(double dt, double delay): m_dt(dt), m_delay(delay)
+    Ekf(double t_dt, double t_delay) : m_dt(t_dt), m_delay(t_delay)
     {
         // Initialize state vector
-        m_x = Eigen::VectorXd(6);
+        m_x = Eigen::VectorXd(4);
         m_x.setZero();
 
         // Initialize covariance matrix
-        m_P = Eigen::MatrixXd(6, 6);
+        m_P = Eigen::MatrixXd(4, 4);
         m_P.setIdentity();
-        m_P *= 100;  // High uncertainty in initial state
+        m_P *= 1000.; // High uncertainty in initial state
 
         // Process noise covariance
-        m_Q = Eigen::MatrixXd(6, 6);
+        m_Q = Eigen::MatrixXd(4, 4);
         m_Q.setZero();
-        m_Q(0, 0) = m_Q(1, 1) = 1.1;  // Position noise
-        m_Q(2, 2) = m_Q(3, 3) = 1.1;  // Velocity noise
-        m_Q(4, 4) = m_Q(5, 5) = 1.1;  // Acceleration noise
 
         // Measurement noise covariance
         m_R = Eigen::MatrixXd(2, 2);
         m_R.setIdentity();
-        m_R *= 0.01;  // Low measurement noise
+        m_R *= 10.; // Low measurement noise
 
         // Identity matrix
-        m_I = Eigen::MatrixXd::Identity(6, 6);
+        m_I = Eigen::MatrixXd::Identity(4, 4);
+
+        m_A << 1, 0, m_dt, 0, 0, 1, 0, m_dt, 0, 0, 1, 0, 0, 0, 0, 1;
     }
 
+
+//    inline void proccessCollisions(const std::vector<Common::RobotState> t_robots)
+//    {
+//
+//    }
+
+    inline void getOptimalProccessNoise(double t_delta_t, const double &t_error)
+    {
+        double sigma = std::sqrt((3.0 * t_error) / t_delta_t) / t_delta_t;
+        double dt3   = (1.0 / 3.0) * t_delta_t * t_delta_t * t_delta_t * sigma * sigma;
+        double dt2   = (1.0 / 2.0) * t_delta_t * t_delta_t * sigma * sigma;
+        double dt1   = t_delta_t * sigma * sigma;
+        m_Q << dt3, 0, dt2, 0, 0, dt3, 0, dt2, dt2, 0, dt1, 0, 0, dt2, 0, dt1;
+    }
     // Predict and update methods
-    inline void predict(double delta_t) {
-        Eigen::MatrixXd A(6, 6);
-        A << 1, 0, delta_t, 0, 0.5 * delta_t * delta_t, 0,
-            0, 1, 0, delta_t, 0, 0.5 * delta_t * delta_t,
-            0, 0, 1, 0, delta_t, 0,
-            0, 0, 0, 1, 0, delta_t,
-            0, 0, 0, 0, 1, 0,
-            0, 0, 0, 0, 0, 1;
-
+    inline void predict(double t_delta_t, const int &t_delay_queue_size)
+    {
+        if (t_delta_t == 0)
+        {
+            return;
+        }
         // Predict state
-        m_x = A * m_x;
-
+        m_x = m_A * m_x;
+        getOptimalProccessNoise(t_delta_t, 10.7);
         // Predict covariance
-        m_P = A * m_P * A.transpose() + m_Q;
-    }
-    inline void update(const Eigen::VectorXd &z, double delta_t) {
-        // Predict state to the measurement time (compensate for delay)
-        predict(delta_t);
+        m_P = m_A * m_P * m_A.transpose() + m_Q;
 
+        m_x_delay_buffer.push_back(m_x);
+        m_P_delay_buffer.push_back(m_P);
+        if (m_x_delay_buffer.size() > t_delay_queue_size)
+        {
+            m_x_delay_buffer.pop_front();
+            m_P_delay_buffer.pop_front();
+        }
+    }
+
+    inline void update(const Eigen::VectorXd &t_z, const int & t_forward_steps)
+    {
+        Eigen::VectorXd x_delayed = m_x_delay_buffer.front();
+        Eigen::MatrixXd P_delayed = m_P_delay_buffer.front();
         // Measurement matrix (Cimp)
-        Eigen::MatrixXd H(2, 6);
-        H << 1, 0, 0, 0, 0, 0,
-            0, 1, 0, 0, 0, 0;
+        Eigen::MatrixXd H(2, 4);
+        H << 1, 0, 0, 0, 0, 1, 0, 0;
 
         // Measurement prediction residual (Loss vector)
-        Eigen::VectorXd y = z - H * m_x;
+        Eigen::VectorXd y = t_z - H * x_delayed;
 
         // Measurement covariance
-        Eigen::MatrixXd S = H * m_P * H.transpose() + m_R;
+        Eigen::MatrixXd S = H * P_delayed * H.transpose() + m_R;
 
         // Kalman gain
-        Eigen::MatrixXd K = m_P * H.transpose() * S.inverse();
+        Eigen::MatrixXd K = P_delayed * H.transpose() * S.inverse();
 
         // Update state
-        m_x = m_x + K * y;
+        x_delayed = x_delayed + K * y;
 
         // Update covariance
-        m_P = (m_I - K * H) * m_P;
+        P_delayed = (m_I - K * H) * P_delayed;
 
-        // Propagate state back to the current time
-        predict(-delta_t);
+        for (int i = 0; i < t_forward_steps; ++i) {
+            x_delayed = m_A * x_delayed;
+            P_delayed = m_A * P_delayed * m_A.transpose() + m_Q;
+        }
+
+        m_x = x_delayed;
+        m_P = P_delayed;
     }
 
-    double m_dt;          // Time step for 60 Hz
+    inline void process(const Eigen::VectorXd &t_z)
+    {
+        int delay_steps = m_delay / m_dt;
+        delay_steps = std::max(delay_steps, 1);
+        predict(m_dt, delay_steps);
+        update(t_z, delay_steps);
+    }
+
+    inline Eigen::VectorXd getFutureState(const int &t_steps)
+    {
+        Eigen::VectorXd x = m_x;
+        for(int i = 0 ; i < t_steps ; i ++ ) {
+            x = m_A*x;
+        }
+        return x;
+    }
+
+    double m_dt;
     double m_delay;
 
-    Eigen::VectorXd getSate() const {
+    std::deque<Eigen::VectorXd> m_x_delay_buffer;
+    std::deque<Eigen::MatrixXd> m_P_delay_buffer;
+
+    Eigen::VectorXd getSate() const
+    {
         return m_x;
     }
-private:
-    Eigen::VectorXd m_x;  // State vector
-    Eigen::MatrixXd m_P;  // Covariance matrix
-    Eigen::MatrixXd m_Q;  // Process noise covariance
-    Eigen::MatrixXd m_R;  // Measurement noise covariance
-    Eigen::MatrixXd m_I;  // Identity matrix
-};
 
+
+private:
+    Eigen::VectorXd m_x; // State vector
+    Eigen::MatrixXd m_P; // Covariance matrix
+    Eigen::MatrixXd m_Q; // Process noise covariance
+    Eigen::MatrixXd m_R; // Measurement noise covariance
+    Eigen::MatrixXd m_I; // Identity matrix
+    Eigen::MatrixXd m_A;
+};
 
 class Filtered
 {
@@ -142,7 +189,8 @@ private:
     Common::RawWorldState m_raw_state;
     Common::WorldState    m_state;
 
-    std::unique_ptr<Ekf> m_ball_ekf;
-
+    static constexpr double kBallMaxSpeed = 15000.;
+    std::unique_ptr<Ekf>    m_ball_ekf;
+    std::unique_ptr<Ekf>    m_ball_ekf_future;
 };
 } // namespace Tyr::Vision

@@ -27,20 +27,24 @@ void Filtered::processBalls()
 void Filtered::newKalmanBall(const Common::Vec2 &t_position)
 {
     Eigen::VectorXd z(2);
-    m_ball_ekf->predict(m_ball_ekf->m_dt);
+
     z(0) = t_position.x;
     z(1) = t_position.y;
-    m_ball_ekf->update(z, m_ball_ekf->m_delay);
-
+    m_ball_ekf->process(z);
     auto m_x = m_ball_ekf->getSate();
-
+    m_ball_ekf_future->process(z);
+    auto future = m_ball_ekf_future->getFutureState(50);
+//
     m_state.ball.position = Common::Vec2(m_x(0), m_x(1));
     m_state.ball.velocity = Common::Vec2(m_x(2), m_x(3));
-    m_state.ball.acceleration = Common::Vec2(m_x(4), m_x(5));
-    Common::Vec2 stop_point = m_state.ball.position + m_state.ball.velocity.normalized() * ( m_state.ball.velocity.lengthSquared() / (2 * (950)));
-    Common::debug().draw(Common::Circle{stop_point, 100}, Common::Color::red());
+
+    Common::logCritical("what: {}", Common::Vec2(future(2), future(3)).length());
+
+    Common::debug().draw(Common::Circle{Common::Vec2(future(0), future(1)), 40}, Common::Color::blue());
     m_ball_not_seen         = 0;
     m_state.ball.seen_state = Common::SeenState::Seen;
+
+//    if()
 }
 
 void Filtered::filterBalls()
