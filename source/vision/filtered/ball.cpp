@@ -5,54 +5,32 @@ namespace Tyr::Vision
 
 void Filtered::processBalls()
 {
-    auto &balls = m_raw_state.balls;
-    if(balls.size())
-    {
-        newKalmanBall(balls[0].position);
-        //    } else if(balls.size())
-        //    {
-        //        Common::Vec2 merge(0,0);
-        //        for (const auto ball:balls)
-        //        {
-        //            merge +=ball.position;
-        //        }
-        //        merge/=balls.size();
-        //        newKalmanBall(merge);
-        //    }
-        //    filterBalls();
-        //    predictBall();
-    }
+    filterBalls();
 }
 
-void Filtered::newKalmanBall(const Common::Vec2 &t_position)
+void Filtered::newKalmanBall(const Common::Vec2 &t_position, const bool &t_seen)
 {
     Eigen::VectorXd z(2);
 
     z(0) = t_position.x;
     z(1) = t_position.y;
-    m_ball_ekf->process(z);
+    m_ball_ekf->process(z, t_seen, m_state.own_robot, m_state.opp_robot);
     auto m_x = m_ball_ekf->getSate();
-    m_ball_ekf_future->process(z);
-    auto future = m_ball_ekf_future->getFutureState(50);
-//
+    m_ball_ekf_future->process(z, t_seen, m_state.own_robot, m_state.opp_robot);
+    auto future           = m_ball_ekf_future->getFutureState(200, m_state.own_robot, m_state.opp_robot);
     m_state.ball.position = Common::Vec2(m_x(0), m_x(1));
     m_state.ball.velocity = Common::Vec2(m_x(2), m_x(3));
 
-    Common::logCritical("what: {}", Common::Vec2(future(2), future(3)).length());
-
-    Common::debug().draw(Common::Circle{Common::Vec2(future(0), future(1)), 40}, Common::Color::blue());
-    m_ball_not_seen         = 0;
-    m_state.ball.seen_state = Common::SeenState::Seen;
-
-//    if()
+    //    Common::debug().draw(Common::Circle{Common::Vec2(future(0), future(1)), 40}, Common::Color::blue());
 }
 
 void Filtered::filterBalls()
 {
     auto &balls = m_raw_state.balls;
 
-    int   id  = std::numeric_limits<int>::max();
-    float dis = std::numeric_limits<float>::max();
+    int             id  = std::numeric_limits<int>::max();
+    float           dis = std::numeric_limits<float>::max();
+    Eigen::VectorXd z(2);
 
     for (size_t i = 0; i < balls.size(); i++)
     {
@@ -67,6 +45,7 @@ void Filtered::filterBalls()
     if (dis < Common::config().vision.max_ball_2_frame_dist)
     {
         m_last_raw_ball = balls[id];
+        Common::logCritical("xy {} {}", m_last_raw_ball.position.x, m_last_raw_ball.position.y);
 
         if (m_ball_not_seen > 0)
         {

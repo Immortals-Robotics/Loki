@@ -18,10 +18,10 @@ Filtered::Filtered()
         }
     }
 
-    m_client = std::make_unique<Common::NngClient>(Common::config().network.raw_world_state_url);
-    m_server = std::make_unique<Common::NngServer>(Common::config().network.world_state_url);
-    m_ball_ekf = std::make_unique<Ekf>(1./60., 0);
-    m_ball_ekf_future = std::make_unique<Ekf>(1./60., 0);
+    m_client          = std::make_unique<Common::NngClient>(Common::config().network.raw_world_state_url);
+    m_server          = std::make_unique<Common::NngServer>(Common::config().network.world_state_url);
+    m_ball_ekf        = std::make_unique<Ekf>(1. / 60., 0);
+    m_ball_ekf_future = std::make_unique<Ekf>(1. / 60., 0);
 }
 
 bool Filtered::receive()
@@ -48,5 +48,108 @@ bool Filtered::publish() const
     m_state.fillProto(&pb_state);
 
     return m_server->send(m_state.time, pb_state);
+}
+
+Eigen::VectorXd Ekf::processCollisions(Common::BallState t_ball, const Common::RobotState t_own_robots[], const Common::RobotState t_opp_robots[])
+{
+    Eigen::VectorXd output(4);
+
+    Common::BallState predicted_ball = t_ball;
+    float             ball_radius    = Common::field().ball_radius;
+    float             arc_angle      = 50.;
+
+    std::vector<Common::RobotState> robots;
+    for (int i = 0; i < Common::Config::Common::kMaxRobots ; i++) {
+        robots.push_back(t_opp_robots[i]);
+        robots.push_back(t_own_robots[i]);
+    }
+
+    for (const auto & robot:robots)
+    {
+        if (robot.seen_state == Common::SeenState::CompletelyOut)
+        {
+            continue;
+        }
+
+        if (Common::Sector(robot.position, Common::field().robot_radius + ball_radius,
+                           Common::Angle::fromDeg(robot.angle.deg() - arc_angle),
+                           Common::Angle::fromDeg(robot.angle.deg() + arc_angle))
+                .contains(t_ball.position))
+        {
+            Common::logCritical("sag bezane ke tushe");
+            auto front_line = Common::LineSegment(
+                robot.position + (robot.angle + Common::Angle::fromDeg(arc_angle)).toUnitVec() *
+                                           (Common::field().robot_radius + ball_radius),
+                robot.position + (robot.angle - Common::Angle::fromDeg(arc_angle)).toUnitVec() *
+                                           (Common::field().robot_radius + ball_radius));
+
+            auto ball_line = Common::LineSegment(t_ball.position, t_ball.position - t_ball.velocity * 4);
+
+            auto intersect = Common::Line::fromSegment(ball_line).intersect(front_line);
+            if (intersect.has_value() &&
+                ((intersect->x - front_line.start.x) * (intersect->x - front_line.end.x) <= 1 &&
+                 (intersect->y - front_line.start.y) * (intersect->y - front_line.end.y) <= 1))
+            {
+                auto collision_angle = robot.angle - (t_ball.velocity).toAngle();
+                if (collision_angle.deg360() > 90 && collision_angle.deg360() < 270)
+                {
+                    // 0.5 should be tuned
+                    auto normal_vec = robot.angle.toUnitVec();
+
+                    auto v_n = t_ball.velocity.dot(normal_vec);
+                    auto v_t = t_ball.velocity - (normal_vec * v_n);
+                    /// damping factor
+                    v_n                     = v_n * (1 - 0.98);
+                    v_t                     = v_t * 0.1;
+                    auto new_vel            = (normal_vec * v_n) * -1 + v_t;
+                    predicted_ball.position = *intersect;
+                    predicted_ball.velocity = new_vel;
+                    if (predicted_ball.velocity.length())
+                    {
+                        predicted_ball.position += (*intersect -robot.position).normalized() * (ball_radius*2);
+                    }
+                    Common::debug().draw(predicted_ball.position);
+                    break;
+                }
+            }
+
+            auto circle_intersect = Common::Line::fromSegment(ball_line).intersect(
+                Common::Circle{robot.position, Common::field().robot_radius + ball_radius});
+            if (circle_intersect.size())
+            {
+                auto reflect_point = circle_intersect.at(0);
+                if (circle_intersect.size() > 1)
+                {
+                    if (circle_intersect.at(1).distanceTo(t_ball.position - t_ball.velocity) <
+                        circle_intersect.at(0).distanceTo(t_ball.position - t_ball.velocity))
+                    {
+                        reflect_point = circle_intersect.at(1);
+                    }
+                }
+
+                auto normal_vec = (reflect_point - robot.position).normalized();
+
+                auto v_n = t_ball.velocity.dot(normal_vec);
+                auto v_t = t_ball.velocity - (normal_vec * v_n);
+                /// damping factor
+                v_n          = v_n * (1 - 0.9);
+                v_t          = v_t * 0.4;
+                auto new_vel = (normal_vec * v_n) * -1 + v_t;
+
+                predicted_ball.velocity = new_vel;
+                predicted_ball.position = reflect_point;
+                if (predicted_ball.velocity.length())
+                {
+                    predicted_ball.position += normal_vec * (ball_radius * 2);
+                }
+            }
+
+            break;
+        }
+    }
+
+    output << predicted_ball.position.x, predicted_ball.position.y, predicted_ball.velocity.x,
+        predicted_ball.velocity.y;
+    return output;
 }
 } // namespace Tyr::Vision
