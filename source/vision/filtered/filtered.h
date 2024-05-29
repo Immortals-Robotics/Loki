@@ -39,19 +39,22 @@ public:
         // Predict covariance
         m_P = m_A * m_P * m_A.transpose() + m_Q;
 
-        m_x_delay_buffer.push_back(m_x);
-        m_P_delay_buffer.push_back(m_P);
-        if (m_x_delay_buffer.size() > t_delay_queue_size)
+        if (m_x_delay_buffer.size() == t_delay_queue_size)
         {
             m_x_delay_buffer.pop_front();
             m_P_delay_buffer.pop_front();
         }
+
+        m_x_delay_buffer.push_back(m_x);
+        m_P_delay_buffer.push_back(m_P);
+
     }
 
     inline void update(const Eigen::VectorXd &t_z, const int &t_forward_steps)
     {
         Eigen::VectorXd x_delayed = m_x_delay_buffer.front();
         Eigen::MatrixXd P_delayed = m_P_delay_buffer.front();
+
         // Measurement matrix (Cimp)
         Eigen::MatrixXd H(2, 4);
         H << 1, 0, 0, 0, 0, 1, 0, 0;
@@ -89,7 +92,7 @@ public:
         predict(m_dt, delay_steps);
         if (t_seen)
         {
-            update(t_z, delay_steps);
+            update(t_z, delay_steps - 1);
         }
         Common::BallState ball;
         ball.position.x = m_x(0);
@@ -134,7 +137,7 @@ public:
         // Measurement noise covariance
         m_R = Eigen::MatrixXd(2, 2);
         m_R.setIdentity();
-        m_R *= 10.; // Low measurement noise
+        m_R *= 100.; // Low measurement noise
 
         // Identity matrix
         m_I = Eigen::MatrixXd::Identity(4, 4);
