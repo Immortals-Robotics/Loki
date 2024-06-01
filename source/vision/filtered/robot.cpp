@@ -176,4 +176,5 @@ void Filtered::sendStates()
         }
     }
 }
+
 } // namespace Tyr::Vision

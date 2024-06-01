@@ -6,6 +6,7 @@ find_package(immortals-common CONFIG REQUIRED)
 set(HEADER_FILES
         pch.h
         filtered/filtered.h
+		filtered/sector.h
         kalman/filtered_object.h
         raw/raw.h)
 
@@ -28,7 +29,7 @@ source_group(TREE ${CMAKE_CURRENT_SOURCE_DIR} FILES ${SOURCE_FILES} ${HEADER_FIL
 
 target_link_libraries(${PROJECT_NAME} PUBLIC
         immortals::common
-	Eigen3::Eigen)
+		Eigen3::Eigen)
 
 set_target_properties(${PROJECT_NAME} PROPERTIES UNITY_BUILD ${USE_UNITY_BUILDS})
 

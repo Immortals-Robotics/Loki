@@ -50,45 +50,36 @@ bool Filtered::publish() const
     return m_server->send(m_state.time, pb_state);
 }
 
-Eigen::VectorXd Ekf::processCollisions(Common::BallState t_ball, const Common::RobotState t_own_robots[], const Common::RobotState t_opp_robots[])
+Eigen::VectorXd Ekf::processCollisions(Common::BallState t_ball, const Common::RobotState t_own_robots[],
+                                       const Common::RobotState t_opp_robots[])
 {
     Eigen::VectorXd output(4);
 
     Common::BallState predicted_ball = t_ball;
     float             ball_radius    = Common::field().ball_radius;
-    float             arc_angle      = 50.;
 
     std::vector<Common::RobotState> robots;
-    for (int i = 0; i < Common::Config::Common::kMaxRobots ; i++) {
+    for (int i = 0; i < Common::Config::Common::kMaxRobots; i++)
+    {
         robots.push_back(t_opp_robots[i]);
         robots.push_back(t_own_robots[i]);
     }
 
-    for (const auto & robot:robots)
+    for (const auto &robot : robots)
     {
         if (robot.seen_state == Common::SeenState::CompletelyOut)
         {
             continue;
         }
-
-        if (Common::Sector(robot.position, Common::field().robot_radius + ball_radius,
-                           Common::Angle::fromDeg(robot.angle.deg() - arc_angle),
-                           Common::Angle::fromDeg(robot.angle.deg() + arc_angle))
-                .contains(t_ball.position))
+        const auto obstacle = Common::Robot(robot.position, Common::field().robot_radius + Common::field().ball_radius, robot.angle);
+        if (obstacle.inside(t_ball.position))
         {
-            Common::logCritical("sag bezane ke tushe");
-            auto front_line = Common::LineSegment(
-                robot.position + (robot.angle + Common::Angle::fromDeg(arc_angle)).toUnitVec() *
-                                           (Common::field().robot_radius + ball_radius),
-                robot.position + (robot.angle - Common::Angle::fromDeg(arc_angle)).toUnitVec() *
-                                           (Common::field().robot_radius + ball_radius));
-
             auto ball_line = Common::LineSegment(t_ball.position, t_ball.position - t_ball.velocity * 4);
 
-            auto intersect = Common::Line::fromSegment(ball_line).intersect(front_line);
+            auto intersect = Common::Line::fromSegment(ball_line).intersect(obstacle.getFrontLine());
             if (intersect.has_value() &&
-                ((intersect->x - front_line.start.x) * (intersect->x - front_line.end.x) <= 1 &&
-                 (intersect->y - front_line.start.y) * (intersect->y - front_line.end.y) <= 1))
+                ((intersect->x - obstacle.getFrontLine().start.x) * (intersect->x - obstacle.getFrontLine().end.x) <= 1 &&
+                 (intersect->y - obstacle.getFrontLine().start.y) * (intersect->y - obstacle.getFrontLine().end.y) <= 1))
             {
                 auto collision_angle = robot.angle - (t_ball.velocity).toAngle();
                 if (collision_angle.deg360() > 90 && collision_angle.deg360() < 270)
@@ -106,9 +97,8 @@ Eigen::VectorXd Ekf::processCollisions(Common::BallState t_ball, const Common::R
                     predicted_ball.velocity = new_vel;
                     if (predicted_ball.velocity.length())
                     {
-                        predicted_ball.position += (*intersect -robot.position).normalized() * (ball_radius*2);
+                        predicted_ball.position += (*intersect - robot.position).normalized() * (ball_radius * 2);
                     }
-                    Common::debug().draw(predicted_ball.position);
                     break;
                 }
             }
@@ -152,4 +142,25 @@ Eigen::VectorXd Ekf::processCollisions(Common::BallState t_ball, const Common::R
         predicted_ball.velocity.y;
     return output;
 }
+
+Eigen::Vector3d Filtered::getCameraPos(const int t_id)
+{
+    auto camera_pos = Eigen::Vector3d(3000,2250,4000);
+
+    if(t_id != 0)
+    {
+        return camera_pos;
+    }
+//
+//    const float focal = 390.;
+//    const Common::Vec2 principal_point(300,300);
+//    const float dist = 0.2;
+//    const Eigen::Quaterniond q(0.7,0.7,0.7,0.7);
+//    const Common::Vec3 translation(0,0,3500);
+//
+    return camera_pos;
+}
+
+
+
 } // namespace Tyr::Vision

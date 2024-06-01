@@ -47,7 +47,6 @@ public:
 
         m_x_delay_buffer.push_back(m_x);
         m_P_delay_buffer.push_back(m_P);
-
     }
 
     inline void update(const Eigen::VectorXd &t_z, const int &t_forward_steps)
@@ -164,7 +163,14 @@ private:
     Eigen::MatrixXd m_I; // Identity matrix
     Eigen::MatrixXd m_A;
 };
-
+struct KickSolveResult
+{
+    Eigen::VectorXd x;
+    double          l1Error;
+    double          t_offset;
+    KickSolveResult(Eigen::VectorXd t_x, double t_l1Error, double t_offset)
+        : x(t_x), l1Error(t_l1Error), t_offset(t_offset){};
+};
 class Filtered
 {
 public:
@@ -182,10 +188,17 @@ private:
     void predictRobots();
     void sendStates();
 
-    void processBalls();
-    void filterBalls();
-    void predictBall();
-    void newKalmanBall(const Common::Vec2 &t_position, const bool &t_seen);
+    void            processBalls();
+    void            filterBalls();
+    void            predictBall();
+    void            newKalmanBall(const Common::Vec2 &t_position, const bool &t_seen);
+    Eigen::Vector3d getCameraPos(const int t_id);
+    void            estimateBallHeight(const Common::Vec2 &t_position);
+
+
+
+    KickSolveResult estimate3Offset(double t_offset);
+    KickSolveResult estimate5Offset(double t_offset);
 
 private:
     // TODO: move to settings
@@ -215,8 +228,13 @@ private:
     Common::RawWorldState m_raw_state;
     Common::WorldState    m_state;
 
-    static constexpr double kBallMaxSpeed = 15000.;
-    std::unique_ptr<Ekf>    m_ball_ekf;
-    std::unique_ptr<Ekf>    m_ball_ekf_future;
+    std::unique_ptr<Ekf> m_ball_ekf;
+    std::unique_ptr<Ekf> m_ball_ekf_future;
+
+    std::deque<Eigen::Vector2d> m_ball_records;
+    Eigen::Vector2d             m_kick_position;
+    bool                        m_kick_detected = false;
+    bool                        m_can_kick      = false;
+    double ball_height = 0;
 };
 } // namespace Tyr::Vision
