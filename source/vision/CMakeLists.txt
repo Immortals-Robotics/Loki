@@ -5,6 +5,7 @@ find_package(immortals-common CONFIG REQUIRED)
 
 set(HEADER_FILES
         pch.h
+		filtered/ball_estimator.h
         filtered/filtered.h
 		filtered/sector.h
         kalman/filtered_object.h

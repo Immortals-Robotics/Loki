@@ -22,6 +22,8 @@ Filtered::Filtered()
     m_server          = std::make_unique<Common::NngServer>(Common::config().network.world_state_url);
     m_ball_ekf        = std::make_unique<Ekf>(1. / 60., 0.01);
     m_ball_ekf_future = std::make_unique<Ekf>(1. / 60., 0.01);
+    m_kick_detector   = std::make_unique<KickDetector>();
+    m_chip_estimator  = std::make_unique<ChipEstimator>();
 }
 
 bool Filtered::receive()
@@ -36,7 +38,7 @@ bool Filtered::receive()
 
 void Filtered::process()
 {
-    processBalls();
+    processBalls(true);
     processRobots();
 
     m_state.time = Common::TimePoint::now();
@@ -71,15 +73,18 @@ Eigen::VectorXd Ekf::processCollisions(Common::BallState t_ball, const Common::R
         {
             continue;
         }
-        const auto obstacle = Common::Robot(robot.position, Common::field().robot_radius + Common::field().ball_radius, robot.angle);
+        const auto obstacle =
+            Common::Robot(robot.position, Common::field().robot_radius + Common::field().ball_radius, robot.angle);
         if (obstacle.inside(t_ball.position))
         {
             auto ball_line = Common::LineSegment(t_ball.position, t_ball.position - t_ball.velocity * 4);
 
             auto intersect = Common::Line::fromSegment(ball_line).intersect(obstacle.getFrontLine());
             if (intersect.has_value() &&
-                ((intersect->x - obstacle.getFrontLine().start.x) * (intersect->x - obstacle.getFrontLine().end.x) <= 1 &&
-                 (intersect->y - obstacle.getFrontLine().start.y) * (intersect->y - obstacle.getFrontLine().end.y) <= 1))
+                ((intersect->x - obstacle.getFrontLine().start.x) * (intersect->x - obstacle.getFrontLine().end.x) <=
+                     1 &&
+                 (intersect->y - obstacle.getFrontLine().start.y) * (intersect->y - obstacle.getFrontLine().end.y) <=
+                     1))
             {
                 auto collision_angle = robot.angle - (t_ball.velocity).toAngle();
                 if (collision_angle.deg360() > 90 && collision_angle.deg360() < 270)
@@ -142,25 +147,5 @@ Eigen::VectorXd Ekf::processCollisions(Common::BallState t_ball, const Common::R
         predicted_ball.velocity.y;
     return output;
 }
-
-Eigen::Vector3d Filtered::getCameraPos(const int t_id)
-{
-    auto camera_pos = Eigen::Vector3d(3000,2250,4000);
-
-    if(t_id != 0)
-    {
-        return camera_pos;
-    }
-//
-//    const float focal = 390.;
-//    const Common::Vec2 principal_point(300,300);
-//    const float dist = 0.2;
-//    const Eigen::Quaterniond q(0.7,0.7,0.7,0.7);
-//    const Common::Vec3 translation(0,0,3500);
-//
-    return camera_pos;
-}
-
-
 
 } // namespace Tyr::Vision

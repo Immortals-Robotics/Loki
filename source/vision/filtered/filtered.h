@@ -1,7 +1,7 @@
 #pragma once
 
 #include "../kalman/filtered_object.h"
-#include "sector.h"
+#include "ball_estimator.h"
 namespace Tyr::Vision
 {
 class Ekf
@@ -18,7 +18,7 @@ public:
     static Eigen::VectorXd processCollisions(Common::BallState t_ball, const Common::RobotState t_own_robots[],
                                              const Common::RobotState t_opp_robots[]);
 
-    inline void getOptimalProccessNoise(double t_delta_t, const double &t_error)
+    inline void getOptimalProcessNoise(double t_delta_t, const double &t_error)
     {
         double sigma = std::sqrt((3.0 * t_error) / t_delta_t) / t_delta_t;
         double dt3   = (1.0 / 3.0) * t_delta_t * t_delta_t * t_delta_t * sigma * sigma;
@@ -35,7 +35,7 @@ public:
         }
         // Predict state
         m_x = m_A * m_x;
-        getOptimalProccessNoise(t_delta_t, 0.7);
+        getOptimalProcessNoise(t_delta_t, 0.7);
         // Predict covariance
         m_P = m_A * m_P * m_A.transpose() + m_Q;
 
@@ -84,7 +84,8 @@ public:
     }
 
     inline void process(const Eigen::VectorXd &t_z, const bool &t_seen, const Common::RobotState t_own_robots[],
-                        const Common::RobotState t_opp_robots[])
+                        const Common::RobotState t_opp_robots[],
+                        const Eigen::Vector3d   &t_z_3d = Eigen::Vector3d(0, 0, 0))
     {
         int delay_steps = m_delay / m_dt;
         delay_steps     = std::max(delay_steps, 1);
@@ -98,11 +99,14 @@ public:
         ball.position.y = m_x(1);
         ball.velocity.x = m_x(2);
         ball.velocity.y = m_x(3);
-        m_x             = Ekf::processCollisions(ball, t_own_robots, t_opp_robots);
+        if (t_z_3d.z() <= 150.)
+        {
+            m_x = Ekf::processCollisions(ball, t_own_robots, t_opp_robots);
+        }
     }
 
     inline Eigen::VectorXd getFutureState(const int &t_steps, const Common::RobotState t_own_robots[],
-                                          const Common::RobotState t_opp_robots[])
+                                          const Common::RobotState t_opp_robots[], const bool &t_airborne = false)
     {
         Eigen::VectorXd x = m_x;
         for (int i = 0; i < t_steps; i++)
@@ -113,7 +117,10 @@ public:
             ball.position.y = x(1);
             ball.velocity.x = x(2);
             ball.velocity.y = x(3);
-            x               = Ekf::processCollisions(ball, t_own_robots, t_opp_robots);
+            if (!t_airborne)
+            {
+                x = Ekf::processCollisions(ball, t_own_robots, t_opp_robots);
+            }
             Common::debug().draw(Common::Circle{Common::Vec2(x(0), x(1)), 20}, Common::Color::blue());
         }
         return x;
@@ -163,14 +170,7 @@ private:
     Eigen::MatrixXd m_I; // Identity matrix
     Eigen::MatrixXd m_A;
 };
-struct KickSolveResult
-{
-    Eigen::VectorXd x;
-    double          l1Error;
-    double          t_offset;
-    KickSolveResult(Eigen::VectorXd t_x, double t_l1Error, double t_offset)
-        : x(t_x), l1Error(t_l1Error), t_offset(t_offset){};
-};
+
 class Filtered
 {
 public:
@@ -188,17 +188,11 @@ private:
     void predictRobots();
     void sendStates();
 
-    void            processBalls();
-    void            filterBalls();
-    void            predictBall();
-    void            newKalmanBall(const Common::Vec2 &t_position, const bool &t_seen);
-    Eigen::Vector3d getCameraPos(const int t_id);
-    void            estimateBallHeight(const Common::Vec2 &t_position);
-
-
-
-    KickSolveResult estimate3Offset(double t_offset);
-    KickSolveResult estimate5Offset(double t_offset);
+    void processBalls(const bool t_new_kalman);
+    void filterBalls(const bool t_new_kalman);
+    void predictBall();
+    void newKalmanBall(const Common::Vec2 &t_position, const bool &t_seen, const int &t_camera_id,
+                       const ChipEstimator::Ball3D &t_ball_3d);
 
 private:
     // TODO: move to settings
@@ -231,10 +225,7 @@ private:
     std::unique_ptr<Ekf> m_ball_ekf;
     std::unique_ptr<Ekf> m_ball_ekf_future;
 
-    std::deque<Eigen::Vector2d> m_ball_records;
-    Eigen::Vector2d             m_kick_position;
-    bool                        m_kick_detected = false;
-    bool                        m_can_kick      = false;
-    double ball_height = 0;
+    std::unique_ptr<KickDetector>  m_kick_detector;
+    std::unique_ptr<ChipEstimator> m_chip_estimator;
 };
 } // namespace Tyr::Vision
