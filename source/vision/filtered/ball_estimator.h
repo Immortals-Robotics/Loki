@@ -120,7 +120,6 @@ public:
                                                       velocity_magnitudes.begin(), 0.0);
         const double ev_velocity = std::sqrt(sq_sum / velocity_magnitudes.size() - mean_velocity * mean_velocity);
         const double threshold   = mean_velocity + t_threshold * ev_velocity;
-        Common::logCritical("mean {} q {} ch {} thr {}", mean_velocity, sq_sum, velocity_changes_magnitudes[0], threshold);
         const bool kick_detected =
             std::any_of(velocity_changes_magnitudes.begin(), velocity_changes_magnitudes.end(),
                         [threshold](double t_change_magnitude) { return t_change_magnitude > threshold; });
@@ -250,7 +249,6 @@ public:
             m_kick          = kick;
             m_kick_position << kick.position.x, kick.position.y;
         }
-        Common::logCritical("kick {}", m_kick_detected);
         if (m_ball_records.size() > 1 && (m_ball_records.back().ball - (*(m_ball_records.end())).ball).length() < 20.)
         {
             reset();
@@ -292,7 +290,6 @@ public:
         }
 
         auto solved_result = estimateWithOffset(t_off, ChipEstimator::getCameraPos(t_camera_id));
-        Common::logCritical("offset: {}", solved_result.t_offset);
 
         auto   vel     = solved_result.x;
         auto   last_t  = (*(m_ball_records.end() - 2)).time.microseconds();
