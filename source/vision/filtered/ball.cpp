@@ -73,7 +73,7 @@ void Filtered::filterBalls(const bool t_new_kalman)
     if (dis < Common::config().vision.max_ball_2_frame_dist)
     {
         ChipEstimator::Ball3D ball_3d =
-            m_chip_estimator->getBall3D(balls[id].position.xy(), m_raw_state.frames[balls[id].m_frame_idx].camera_id,
+            m_chip_estimator->getBall3D(balls[id].position.xy(), balls[id].frame.camera_id,
                                         m_raw_state.time, m_state.own_robot, m_state.opp_robot);
         m_last_raw_ball = balls[id];
         z << balls[id].position.x, balls[id].position.y;
@@ -92,7 +92,7 @@ void Filtered::filterBalls(const bool t_new_kalman)
 
         if (t_new_kalman)
         {
-            newKalmanBall(balls[id].position.xy(), true, m_raw_state.frames[balls[id].m_frame_idx].camera_id, ball_3d);
+            newKalmanBall(balls[id].position.xy(), true, balls[id].frame.camera_id, ball_3d);
         }
         else
         {
@@ -116,7 +116,7 @@ void Filtered::filterBalls(const bool t_new_kalman)
                 if (t_new_kalman)
                 {
                     m_ball_ekf->init(balls[id].position.xy());
-                    newKalmanBall(balls[id].position.xy(), true, m_raw_state.frames[balls[id].m_frame_idx].camera_id);
+                    newKalmanBall(balls[id].position.xy(), true, balls[id].frame.camera_id);
                 }
                 else
                 {
@@ -142,7 +142,7 @@ void Filtered::filterBalls(const bool t_new_kalman)
         {
             if (t_new_kalman)
             {
-                newKalmanBall(Common::Vec2(0, 0), false, m_raw_state.frames[balls[id].m_frame_idx].camera_id);
+                newKalmanBall(Common::Vec2(0, 0), false, balls[id].frame.camera_id);
             }
             m_state.ball.seen_state = Common::SeenState::TemporarilyOut;
         }
