@@ -39,10 +39,12 @@ void ConfigMenu::drawItem(const std::string &t_key, toml::node &t_value)
     }
     else if (t_value.is_string())
     {
+        ImGui::SetNextItemWidth(100);
         m_dirty |= ImGui::InputText(t_key.c_str(), &t_value.as_string()->get());
     }
     else if (t_value.is_floating_point())
     {
+        ImGui::SetNextItemWidth(100);
         m_dirty |= ImGui::InputScalar(t_key.c_str(), ImGuiDataType_Double, &t_value.as_floating_point()->get());
     }
     else if (t_value.is_integer())
@@ -68,6 +70,7 @@ void ConfigMenu::drawItem(const std::string &t_key, toml::node &t_value)
         }
         else
         {
+            ImGui::SetNextItemWidth(100);
             m_dirty |= ImGui::InputScalar(t_key.c_str(), ImGuiDataType_S64, &t_value.as_integer()->get());
         }
     }
