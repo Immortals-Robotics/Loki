@@ -37,14 +37,14 @@ public:
 
     inline void reset()
     {
-        m_can_kick = false;
+        m_can_kick           = false;
         m_candidate_kick_pos = Common::Vec2(-1000000, -1000000);
         m_candidate_robot    = Common::Robot(Common::Vec2(0, 0), 0, Common::Angle::fromDeg(0));
     }
 
     inline Kick detect(const Common::Vec2 &t_ball_position, const Common::TimePoint &t_time,
                        const Common::RobotState t_own_robots[], const Common::RobotState t_opp_robots[],
-                       const double &t_threshold = 0.5, const bool t_fast = true)
+                       const double &t_threshold = 0.8, const bool t_fast = true)
     {
         m_ball_records.push_back(BallTime(t_time, t_ball_position));
         Kick kick;
@@ -77,14 +77,13 @@ public:
                 {
                     m_candidate_kick_pos = t_ball_position;
                     m_candidate_robot    = robot;
-                    m_can_kick     = true;
+                    m_can_kick           = true;
                     continue;
                 }
             }
         }
 
-        if (m_ball_records.size() < (t_fast ? kFastRecordNum : kSlowRecordNum) ||
-            (!m_can_kick))
+        if (m_ball_records.size() < (t_fast ? kFastRecordNum : kSlowRecordNum) || (!m_can_kick))
         {
             return kick;
         }
@@ -120,7 +119,7 @@ public:
                                                       velocity_magnitudes.begin(), 0.0);
         const double ev_velocity = std::sqrt(sq_sum / velocity_magnitudes.size() - mean_velocity * mean_velocity);
         const double threshold   = mean_velocity + t_threshold * ev_velocity;
-        const bool kick_detected =
+        const bool   kick_detected =
             std::any_of(velocity_changes_magnitudes.begin(), velocity_changes_magnitudes.end(),
                         [threshold](double t_change_magnitude) { return t_change_magnitude > threshold; });
 
@@ -129,8 +128,11 @@ public:
              m_ball_records.front().ball.distanceTo(m_candidate_robot.center)) &&
             velocities.back().length() > 500.)
         {
-            kick = Kick(m_candidate_kick_pos, velocities.back(), m_candidate_robot.angle, t_time, true);
-        } else {
+            kick = Kick(m_candidate_kick_pos, velocities.back(), m_candidate_robot.angle, m_ball_records.front().time,
+                        true);
+        }
+        else
+        {
             reset();
         }
 
@@ -141,7 +143,7 @@ private:
     std::deque<BallTime> m_ball_records;
     Common::Vec2         m_candidate_kick_pos = Common::Vec2(-1000000, -1000000);
     Common::Robot        m_candidate_robot    = Common::Robot(Common::Vec2(0, 0), 0, Common::Angle::fromDeg(0));
-    bool                 m_can_kick    = false;
+    bool                 m_can_kick           = false;
 
     constexpr static int kFastRecordNum = 3;
     constexpr static int kSlowRecordNum = 5;
@@ -220,14 +222,15 @@ public:
         m_ball_records.clear();
         m_kick_detected = false;
         m_ball_height   = 0;
-        m_v_z           = 0;
+        m_v_0           = 0;
+        m_result_found  = false;
     }
 
     static inline Common::Vec2 projectToGround(const Common::Vec3 t_ball_pos, Common::Vec3 t_camera_pos)
     {
-        double scale = t_camera_pos.z / (t_camera_pos.z + t_ball_pos.z);
-        return Common::Vec2(((t_ball_pos.x - t_camera_pos.x) * scale) + t_camera_pos.x,
-                            ((t_ball_pos.y - t_camera_pos.y) * scale) + t_camera_pos.y);
+        double scale = t_ball_pos.z / t_camera_pos.z;
+        return Common::Vec2((t_camera_pos.x - t_ball_pos.x) * scale + t_ball_pos.x,
+                            (t_camera_pos.y - t_ball_pos.y) * scale + t_ball_pos.y);
     }
 
     inline Ball3D getBall3D(const Common::Vec2 &t_ball_position, const int &t_camera_id,
@@ -235,6 +238,7 @@ public:
                             const Common::RobotState t_opp_robots[])
     {
         Ball3D result(t_ball_position);
+
         m_ball_records.push_back(KickDetector::BallTime(t_time, t_ball_position));
         if (m_ball_records.size() > kMaxRecords)
         {
@@ -257,64 +261,45 @@ public:
         if (!m_kick_detected)
         {
             m_ball_records.clear();
+            m_result_found = false;
             return result;
         }
 
         if (m_ball_records.size() < kMinRecords)
         {
             return result;
+            m_result_found = false;
         }
 
-        double t_off = 0.05;
-        double inc   = t_off / 2;
+        auto solved_result = estimateWithOffset(0, ChipEstimator::getCameraPos(t_camera_id));
+        auto vel           = solved_result.x;
 
-        while (inc > 1e-3)
+        if ((solved_result.l1_error == -1000000 || vel.z() < 100. || vel.z() > kMaxChipVel) && !m_result_found)
         {
-            auto neg = estimateWithOffset(t_off - 1e-5, ChipEstimator::getCameraPos(t_camera_id));
-            auto pos = estimateWithOffset(t_off + 1e-5, ChipEstimator::getCameraPos(t_camera_id));
-
-            if (pos.l1_error == -1000000 || neg.l1_error == -1000000)
-            {
-                return result;
-            }
-
-            if (neg.l1_error > pos.l1_error)
-            {
-                t_off += inc;
-            }
-            else
-            {
-                t_off -= inc;
-            }
-            inc = inc / 2;
+            return result;
         }
 
-        auto solved_result = estimateWithOffset(t_off, ChipEstimator::getCameraPos(t_camera_id));
-
-        auto   vel     = solved_result.x;
-        auto   last_t  = (*(m_ball_records.end() - 2)).time.microseconds();
-        double delta_t = static_cast<double>(m_ball_records.back().time.microseconds() - last_t) / 1000000.;
-
-        if (solved_result.l1_error < kMaxError && m_v_z == 0)
+        if (solved_result.l1_error < kMaxError && solved_result.l1_error > 0 && vel.z() <= kMaxChipVel)
         {
-            m_v_z            = vel.z();
-            auto t_from_kick = static_cast<double>((last_t - m_kick.time.microseconds())) / 1000000.;
-            m_ball_height    = t_from_kick * m_v_z - 0.5 * kG * t_from_kick * t_from_kick;
-
-            m_v_z -= t_from_kick * kG;
+            m_v_0 = vel.z() +
+                    kG * static_cast<double>(m_ball_records.front().time.microseconds() - m_kick.time.microseconds()) /
+                        1000000;
+            m_result_found = true;
         }
-        m_ball_height += m_v_z * delta_t - 0.5 * kG * delta_t * delta_t;
-        m_v_z -= kG * delta_t;
 
+        double dt = static_cast<double>(t_time.microseconds() - m_kick.time.microseconds()) / 1000000;
+
+        m_ball_height = m_v_0 * dt - 0.5 * kG * dt * dt;
+//        Common::logCritical("height {} vel {} error {} ", m_ball_height, vel.z(), solved_result.l1_error);
         if (m_ball_height <= 0)
         {
             m_ball_height   = 0;
-            m_v_z           = 0;
+            m_v_0           = 0;
             m_kick_detected = false;
         }
-        result.position.z = m_ball_height;
 
-        result.velocity = Common::Vec3(vel.x(), vel.y(), m_v_z);
+        result.position.z = m_ball_height;
+        result.velocity   = Common::Vec3(vel.x(), vel.y(), m_v_0 - kG * dt);
         return result;
     }
 
@@ -324,12 +309,13 @@ private:
     bool                               m_kick_detected = false;
     KickDetector                       m_kick_detector;
     double                             m_ball_height = 0;
-    double                             m_v_z         = 0;
+    double                             m_v_0         = 0;
     KickDetector::Kick                 m_kick;
-
-    constexpr static float  kG          = 9810;
-    constexpr static int    kMinRecords = 9;
-    constexpr static int    kMaxRecords = 50;
-    constexpr static double kMaxError   = 400000;
+    bool                               m_result_found = false;
+    constexpr static float             kG             = 9810;
+    constexpr static int               kMinRecords    = 3;
+    constexpr static int               kMaxRecords    = 200;
+    constexpr static double            kMaxError      = 300000;
+    constexpr static double            kMaxChipVel    = 7000;
 };
 } // namespace Tyr::Vision

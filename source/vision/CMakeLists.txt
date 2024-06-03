@@ -7,9 +7,9 @@ set(HEADER_FILES
         pch.h
 		filtered/ball_estimator.h
         filtered/filtered.h
-		filtered/sector.h
         kalman/filtered_object.h
-        raw/raw.h)
+        raw/raw.h
+		kalman/ekf_3d.h)
 
 set(SOURCE_FILES
         filtered/ball.cpp
