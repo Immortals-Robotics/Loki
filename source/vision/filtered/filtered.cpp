@@ -20,8 +20,8 @@ Filtered::Filtered()
 
     m_client          = std::make_unique<Common::NngClient>(Common::config().network.raw_world_state_url);
     m_server          = std::make_unique<Common::NngServer>(Common::config().network.world_state_url);
-    m_ball_ekf        = std::make_unique<Ekf3D>(1. / 60., 0.01);
-    m_ball_ekf_future = std::make_unique<Ekf3D>(1. / 60., 0.01);
+    m_ball_ekf        = std::make_unique<Ekf3D>(1. / Common::config().vision.vision_frame_rate, 0.01);
+    m_ball_ekf_future = std::make_unique<Ekf3D>(1. / Common::config().vision.vision_frame_rate, 0.01);
     m_kick_detector   = std::make_unique<KickDetector>();
     m_chip_estimator  = std::make_unique<ChipEstimator>();
 }
@@ -38,7 +38,7 @@ bool Filtered::receive()
 
 void Filtered::process()
 {
-    processBalls(true);
+    processBalls(Common::config().vision.use_new_ball_kalman);
     processRobots();
 
     m_state.time = Common::TimePoint::now();

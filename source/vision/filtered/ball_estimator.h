@@ -180,7 +180,7 @@ public:
 
     inline ChipSolveResult estimateWithOffset(const double &t_offset, const Common::Vec3 &t_camera_pos)
     {
-        if (m_ball_records.size() > kMinRecords)
+        if (m_ball_records.size() > Common::config().vision.chip_min_records)
         {
             Eigen::Vector3d f;
             f << t_camera_pos.x, t_camera_pos.y, t_camera_pos.z;
@@ -240,12 +240,13 @@ public:
         Ball3D result(t_ball_position);
 
         m_ball_records.push_back(KickDetector::BallTime(t_time, t_ball_position));
-        if (m_ball_records.size() > kMaxRecords)
+        if (m_ball_records.size() > Common::config().vision.chip_max_records)
         {
             m_ball_records.pop_front();
         }
 
-        KickDetector::Kick kick = m_kick_detector.detect(t_ball_position, t_time, t_own_robots, t_opp_robots);
+        KickDetector::Kick kick = m_kick_detector.detect(t_ball_position, t_time, t_own_robots, t_opp_robots,
+                                                         Common::config().vision.kick_threshold);
 
         if (kick.is_kicked && !m_kick_detected)
         {
@@ -265,7 +266,7 @@ public:
             return result;
         }
 
-        if (m_ball_records.size() < kMinRecords)
+        if (m_ball_records.size() < Common::config().vision.chip_min_records)
         {
             return result;
             m_result_found = false;
@@ -274,12 +275,15 @@ public:
         auto solved_result = estimateWithOffset(0, ChipEstimator::getCameraPos(t_camera_id));
         auto vel           = solved_result.x;
 
-        if ((solved_result.l1_error == -1000000 || vel.z() < 100. || vel.z() > kMaxChipVel) && !m_result_found)
+        if ((solved_result.l1_error == -1000000 || vel.z() < 100. ||
+             vel.z() > Common::config().vision.chip_max_vel_z) &&
+            !m_result_found)
         {
             return result;
         }
 
-        if (solved_result.l1_error < kMaxError && solved_result.l1_error > 0 && vel.z() <= kMaxChipVel)
+        if (solved_result.l1_error < Common::config().vision.chip_max_error && solved_result.l1_error > 0 &&
+            vel.z() <= Common::config().vision.chip_max_vel_z)
         {
             m_v_0 = vel.z() +
                     kG * static_cast<double>(m_ball_records.front().time.microseconds() - m_kick.time.microseconds()) /
@@ -290,7 +294,7 @@ public:
         double dt = static_cast<double>(t_time.microseconds() - m_kick.time.microseconds()) / 1000000;
 
         m_ball_height = m_v_0 * dt - 0.5 * kG * dt * dt;
-//        Common::logCritical("height {} vel {} error {} ", m_ball_height, vel.z(), solved_result.l1_error);
+        Common::logInfo("height {} vel {} error {} ", m_ball_height, vel.z(), solved_result.l1_error);
         if (m_ball_height <= 0)
         {
             m_ball_height   = 0;
@@ -313,9 +317,5 @@ private:
     KickDetector::Kick                 m_kick;
     bool                               m_result_found = false;
     constexpr static float             kG             = 9810;
-    constexpr static int               kMinRecords    = 3;
-    constexpr static int               kMaxRecords    = 200;
-    constexpr static double            kMaxError      = 300000;
-    constexpr static double            kMaxChipVel    = 7000;
 };
 } // namespace Tyr::Vision

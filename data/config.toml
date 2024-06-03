@@ -60,7 +60,7 @@ enable_simulation = false
 gamma_reality = 19
 gamma_simulation = 900
 init_gk_id = 3
-our_side = 1
+our_side = 0
 robot_behavior_tree_config_filename = 'bt_default.xml'
 
     [[soccer.robot_physical_status]]
@@ -177,6 +177,12 @@ robot_behavior_tree_config_filename = 'bt_default.xml'
 
 [vision]
 ball_merge_distance = 70.0
+camera_delay = 0.0
+chip_max_error = 300000.0
+chip_max_records = 200
+chip_max_vel_z = 7000.0
+chip_min_records = 3
+kick_threshold = 0.7
 max_ball_2_frame_dist = 1000.0
 max_ball_frame_not_seen = 120
 max_ball_hist = 10
@@ -185,4 +191,5 @@ merge_distance = 70.0
 use_camera = [ true, true, true, true, false, false, false, false ]
 use_kalman_ang = false
 use_kalman_pos = true
+use_new_ball_kalman = true
 vision_frame_rate = 60.0
